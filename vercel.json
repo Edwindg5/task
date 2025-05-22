@@ -10,7 +10,11 @@
       }
     },
     {
-      "src": "static/*",
+      "src": "static/**",
+      "use": "@vercel/static"
+    },
+    {
+      "src": "templates/**",
       "use": "@vercel/static"
     }
   ],
@@ -20,8 +24,18 @@
       "dest": "/static/$1"
     },
     {
+      "src": "/templates/(.*)",
+      "dest": "/templates/$1"
+    },
+    {
       "src": "/(.*)",
       "dest": "main.py"
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/"
     }
   ]
 }

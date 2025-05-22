@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -23,8 +22,7 @@
         {% block content %}{% endblock %}
     </main>
     <footer>
-   <p>Sistema de Gestión de Tareas &copy; {{ now.year }}</p>
-
+        <p>Sistema de Gestión de Tareas &copy; {{ now.year }}</p>
     </footer>
     <script src="{{ url_for('static', filename='script.js') }}"></script>
     {% block scripts %}{% endblock %}

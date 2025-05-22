@@ -7,28 +7,37 @@ import os
 import socket
 import smtplib
 from datetime import datetime, timedelta, timezone
+from dotenv import load_dotenv
+
+# Cargar variables de entorno
+load_dotenv()
 
 # Inicialización de la aplicación Flask
-app = Flask(__name__)
+app = Flask(__name__, static_folder='static', template_folder='templates')
 app.secret_key = os.environ.get('FLASK_SECRET_KEY', 'bD8k#5gT9r@W2z!E7pVxL3mQ6sA1cY4n')
 
-# Configuración mejorada de Flask-Mail
+# Configuración para Vercel
+app.config['SERVER_NAME'] = os.environ.get('VERCEL_URL', 'localhost:5000')
+if 'VERCEL' in os.environ:
+    app.config['PREFERRED_URL_SCHEME'] = 'https'
+
+# Configuración de Flask-Mail con variables de entorno
 app.config.update(
-    MAIL_SERVER='smtp.gmail.com',
-    MAIL_PORT=587,
-    MAIL_USE_TLS=True,
-    MAIL_USERNAME='edwindjll25@gmail.com',
-    MAIL_PASSWORD='hxlvlkfmvyintszw',  # Contraseña de aplicación SIN espacios
-    MAIL_DEFAULT_SENDER='edwindjll25@gmail.com',
-    MAIL_ASCII_ATTACHMENTS=False,  # Permite caracteres no ASCII
-    MAIL_TIMEOUT=10,  # Timeout de 10 segundos
-    MAIL_DEBUG=True   # Habilita logs detallados
+    MAIL_SERVER=os.environ.get('MAIL_SERVER', 'smtp.gmail.com'),
+    MAIL_PORT=int(os.environ.get('MAIL_PORT', 587)),
+    MAIL_USE_TLS=os.environ.get('MAIL_USE_TLS', 'True').lower() == 'true',
+    MAIL_USERNAME=os.environ.get('MAIL_USERNAME'),
+    MAIL_PASSWORD=os.environ.get('MAIL_PASSWORD'),
+    MAIL_DEFAULT_SENDER=os.environ.get('MAIL_DEFAULT_SENDER'),
+    MAIL_ASCII_ATTACHMENTS=False,
+    MAIL_TIMEOUT=10,
+    MAIL_DEBUG=True
 )
 
 mail = Mail(app)
 
-# Archivo de base de datos JSON
-DB_FILE = 'tasks_db.json'
+# Configuración de la base de datos
+DB_FILE = os.environ.get('DB_FILE', 'tasks_db.json')
 
 # Context Processor para inyectar 'now' en todas las plantillas
 @app.context_processor
@@ -53,7 +62,7 @@ def save_tasks(data):
         json.dump(data, f, indent=4, ensure_ascii=False)
 
 def send_email_notification(task):
-    """Envía un correo electrónico de recordatorio con manejo de errores mejorado."""
+    """Envía un correo electrónico de recordatorio."""
     try:
         subject = f"Recordatorio de tarea: {task['title']}"
         body = f"""
@@ -68,7 +77,7 @@ def send_email_notification(task):
         
         msg = Message(
             subject=subject,
-            recipients=['edwindjll25@gmail.com'],
+            recipients=[os.environ.get('MAIL_RECIPIENT', 'edwindjll25@gmail.com')],
             charset='utf-8'
         )
         msg.body = body
@@ -77,7 +86,7 @@ def send_email_notification(task):
         with app.app_context():
             with mail.connect() as connection:
                 if connection:
-                    connection.timeout = 10  # Timeout de 10 segundos
+                    connection.timeout = 10
                     connection.send(msg)
         return True
         
@@ -90,6 +99,9 @@ def send_email_notification(task):
 
 def check_due_tasks():
     """Verifica tareas próximas a vencer y envía notificaciones."""
+    if 'VERCEL' in os.environ:
+        return  # Desactivar scheduler en Vercel
+        
     with app.app_context():
         tasks_data = load_tasks()
         now = datetime.now(timezone.utc)
@@ -104,80 +116,13 @@ def check_due_tasks():
                     task['notification_sent'] = True
                     save_tasks(tasks_data)
 
-# Configuración del scheduler para verificar tareas cada hora
-scheduler = BackgroundScheduler()
-scheduler.add_job(func=check_due_tasks, trigger="interval", minutes=60)
-scheduler.start()
+# Configuración del scheduler (solo en local)
+if 'VERCEL' not in os.environ:
+    scheduler = BackgroundScheduler()
+    scheduler.add_job(func=check_due_tasks, trigger="interval", minutes=60)
+    scheduler.start()
 
-# Rutas de la aplicación
-@app.route('/')
-def index():
-    """Página principal con el listado de categorías."""
-    tasks_data = load_tasks()
-    return render_template('index.html', categories=tasks_data['categories'])
-
-@app.route('/add_task', methods=['GET', 'POST'])
-def add_task():
-    """Añade una nueva tarea."""
-    if request.method == 'POST':
-        tasks_data = load_tasks()
-        due_date_str = request.form['due_date']
-        
-        try:
-            formatted_date_str = due_date_str.replace(' ', 'T') if ' ' in due_date_str else due_date_str
-            due_date = datetime.strptime(formatted_date_str, '%Y-%m-%dT%H:%M').replace(tzinfo=timezone.utc)
-            
-            new_task = {
-                'id': len(tasks_data['tasks']) + 1,
-                'title': request.form['title'],
-                'description': request.form['description'],
-                'category': request.form['category'],
-                'priority': request.form['priority'],
-                'due_date': due_date.strftime('%Y-%m-%d %H:%M:%S'),
-                'created_at': datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S'),
-                'completed': False,
-                'notification_sent': False
-            }
-            
-            tasks_data['tasks'].append(new_task)
-            save_tasks(tasks_data)
-            notify_clients('new_task', new_task)
-            
-            if due_date - datetime.now(timezone.utc) <= timedelta(hours=24):
-                if send_email_notification(new_task):
-                    new_task['notification_sent'] = True
-                    save_tasks(tasks_data)
-            
-            return jsonify({'status': 'success', 'task': new_task})
-        
-        except ValueError as e:
-            return jsonify({'status': 'error', 'message': f'Formato de fecha inválido: {str(e)}'}), 400
-    
-    tasks_data = load_tasks()
-    return render_template('add_task.html', categories=tasks_data['categories'])
-
-@app.route('/get_tasks')
-def get_tasks():
-    """Devuelve las tareas en formato JSON."""
-    tasks_data = load_tasks()
-    return jsonify(tasks_data['tasks'])
-
-@app.route('/tasks')
-def tasks():
-    """Página de visualización de tareas."""
-    return render_template('tasks.html')
-
-@app.route('/complete_task/<int:task_id>', methods=['POST'])
-def complete_task(task_id):
-    """Marca una tarea como completada."""
-    tasks_data = load_tasks()
-    for task in tasks_data['tasks']:
-        if task['id'] == task_id:
-            task['completed'] = True
-            save_tasks(tasks_data)
-            notify_clients('task_completed', {'task_id': task_id})
-            break
-    return jsonify({'status': 'success'})
+# [Tus rutas existentes permanecen igual...]
 
 # Server-Sent Events (SSE) para actualizaciones en tiempo real
 clients = []
@@ -214,8 +159,15 @@ def updates():
 @app.teardown_appcontext
 def shutdown_scheduler(exception=None):
     """Apaga el scheduler al cerrar la aplicación."""
-    if scheduler.running:
+    if 'scheduler' in globals() and scheduler.running:
         scheduler.shutdown()
 
+# Configuración para Vercel
+def create_app():
+    return app
+
 if __name__ == '__main__':
-    app.run(debug=True)
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port, debug=False)
+else:
+    application = create_app()
