@@ -1,0 +1,21 @@
+{
+    "tasks": [
+        {
+            "id": 1,
+            "title": "s",
+            "description": "s",
+            "category": "Fácil",
+            "priority": "Baja",
+            "due_date": "2025-05-22 23:57:00",
+            "created_at": "2025-05-22 23:56:33",
+            "completed": false,
+            "notification_sent": true
+        }
+    ],
+    "categories": [
+        "Fácil",
+        "Medio",
+        "Difícil"
+    ],
+    "next_id": 2
+}

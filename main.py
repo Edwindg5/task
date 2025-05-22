@@ -21,7 +21,7 @@ app.config['SERVER_NAME'] = os.environ.get('VERCEL_URL', 'localhost:5000')
 if 'VERCEL' in os.environ:
     app.config['PREFERRED_URL_SCHEME'] = 'https'
 
-# Configuración de Flask-Mail con variables de entorno
+# Configuración de Flask-Mail
 app.config.update(
     MAIL_SERVER=os.environ.get('MAIL_SERVER', 'smtp.gmail.com'),
     MAIL_PORT=int(os.environ.get('MAIL_PORT', 587)),
@@ -36,8 +36,12 @@ app.config.update(
 
 mail = Mail(app)
 
-# Configuración de la base de datos
-DB_FILE = os.environ.get('DB_FILE', 'tasks_db.json')
+# Almacenamiento en memoria
+tasks_data = {
+    'tasks': [],
+    'categories': ['Fácil', 'Medio', 'Difícil'],
+    'next_id': 1
+}
 
 # Context Processor para inyectar 'now' en todas las plantillas
 @app.context_processor
@@ -45,21 +49,33 @@ def inject_now():
     return {'now': datetime.now(timezone.utc)}
 
 # Funciones auxiliares
-def load_tasks():
-    """Carga las tareas desde el archivo JSON."""
-    if not os.path.exists(DB_FILE):
-        return {'tasks': [], 'categories': ['Fácil', 'Medio', 'Difícil']}
-    
-    with open(DB_FILE, 'r', encoding='utf-8') as f:
+def save_tasks():
+    """Guarda las tareas en memoria (persistencia solo para desarrollo local)."""
+    if 'VERCEL' not in os.environ:
         try:
-            return json.load(f)
-        except json.JSONDecodeError:
-            return {'tasks': [], 'categories': ['Fácil', 'Medio', 'Difícil']}
+            with open('tasks_memory.json', 'w', encoding='utf-8') as f:
+                json.dump(tasks_data, f, indent=4, ensure_ascii=False)
+        except Exception as e:
+            print(f"⚠️ No se pudo guardar en archivo: {str(e)}")
 
-def save_tasks(data):
-    """Guarda las tareas en el archivo JSON."""
-    with open(DB_FILE, 'w', encoding='utf-8') as f:
-        json.dump(data, f, indent=4, ensure_ascii=False)
+def load_tasks():
+    """Carga las tareas desde memoria (y desde archivo solo en desarrollo local)."""
+    global tasks_data
+    if 'VERCEL' not in os.environ and os.path.exists('tasks_memory.json'):
+        try:
+            with open('tasks_memory.json', 'r', encoding='utf-8') as f:
+                saved_data = json.load(f)
+                # Validar estructura básica
+                if 'tasks' in saved_data and 'categories' in saved_data:
+                    tasks_data = saved_data
+                    # Asegurar next_id está actualizado
+                    if tasks_data['tasks']:
+                        tasks_data['next_id'] = max(task['id'] for task in tasks_data['tasks']) + 1
+                    else:
+                        tasks_data['next_id'] = 1
+        except Exception as e:
+            print(f"⚠️ No se pudo cargar desde archivo: {str(e)}")
+    return tasks_data
 
 def send_email_notification(task):
     """Envía un correo electrónico de recordatorio."""
@@ -82,7 +98,6 @@ def send_email_notification(task):
         )
         msg.body = body
         
-        # Configuración manual del timeout
         with app.app_context():
             with mail.connect() as connection:
                 if connection:
@@ -103,7 +118,7 @@ def check_due_tasks():
         return  # Desactivar scheduler en Vercel
         
     with app.app_context():
-        tasks_data = load_tasks()
+        global tasks_data
         now = datetime.now(timezone.utc)
         
         for task in tasks_data['tasks']:
@@ -114,7 +129,7 @@ def check_due_tasks():
             if now >= due_date - timedelta(hours=1) and not task.get('notification_sent', False):
                 if send_email_notification(task):
                     task['notification_sent'] = True
-                    save_tasks(tasks_data)
+                    save_tasks()
 
 # Configuración del scheduler (solo en local)
 if 'VERCEL' not in os.environ:
@@ -122,18 +137,22 @@ if 'VERCEL' not in os.environ:
     scheduler.add_job(func=check_due_tasks, trigger="interval", minutes=60)
     scheduler.start()
 
+# Cargar tareas al iniciar (solo en local)
+if 'VERCEL' not in os.environ:
+    load_tasks()
+
 # Rutas de la aplicación
 @app.route('/')
 def index():
     """Página principal con el listado de categorías."""
-    tasks_data = load_tasks()
     return render_template('index.html', categories=tasks_data['categories'])
 
 @app.route('/add_task', methods=['GET', 'POST'])
 def add_task():
     """Añade una nueva tarea."""
+    global tasks_data
+    
     if request.method == 'POST':
-        tasks_data = load_tasks()
         due_date_str = request.form['due_date']
         
         try:
@@ -141,7 +160,7 @@ def add_task():
             due_date = datetime.strptime(formatted_date_str, '%Y-%m-%dT%H:%M').replace(tzinfo=timezone.utc)
             
             new_task = {
-                'id': len(tasks_data['tasks']) + 1,
+                'id': tasks_data['next_id'],
                 'title': request.form['title'],
                 'description': request.form['description'],
                 'category': request.form['category'],
@@ -153,26 +172,25 @@ def add_task():
             }
             
             tasks_data['tasks'].append(new_task)
-            save_tasks(tasks_data)
+            tasks_data['next_id'] += 1
+            save_tasks()
             notify_clients('new_task', new_task)
             
             if due_date - datetime.now(timezone.utc) <= timedelta(hours=24):
                 if send_email_notification(new_task):
                     new_task['notification_sent'] = True
-                    save_tasks(tasks_data)
+                    save_tasks()
             
             return jsonify({'status': 'success', 'task': new_task})
         
         except ValueError as e:
             return jsonify({'status': 'error', 'message': f'Formato de fecha inválido: {str(e)}'}), 400
     
-    tasks_data = load_tasks()
     return render_template('add_task.html', categories=tasks_data['categories'])
 
 @app.route('/get_tasks')
 def get_tasks():
     """Devuelve las tareas en formato JSON."""
-    tasks_data = load_tasks()
     return jsonify(tasks_data['tasks'])
 
 @app.route('/tasks')
@@ -183,11 +201,11 @@ def tasks():
 @app.route('/complete_task/<int:task_id>', methods=['POST'])
 def complete_task(task_id):
     """Marca una tarea como completada."""
-    tasks_data = load_tasks()
+    global tasks_data
     for task in tasks_data['tasks']:
         if task['id'] == task_id:
             task['completed'] = True
-            save_tasks(tasks_data)
+            save_tasks()
             notify_clients('task_completed', {'task_id': task_id})
             break
     return jsonify({'status': 'success'})
