@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+
+{% block content %}
+    <section class="hero">
+        <div class="hero-content">
+            <h2>Organiza tus tareas eficientemente</h2>
+            <p>Clasifica tus tareas por categoría y prioridad, recibe recordatorios y colabora en equipo.</p>
+            <a href="{{ url_for('add_task') }}" class="btn">Agregar Nueva Tarea</a>
+        </div>
+    </section>
+    
+    <section class="features">
+        <div class="feature-card">
+            <h3>📅 Recordatorios</h3>
+            <p>Recibe correos electrónicos con tus tareas pendientes.</p>
+        </div>
+        <div class="feature-card">
+            <h3>👥 Colaboración</h3>
+            <p>Trabaja en equipo con sincronización en tiempo real.</p>
+        </div>
+        <div class="feature-card">
+            <h3>📊 Organización</h3>
+            <p>Clasifica tus tareas por categoría y prioridad.</p>
+        </div>
+    </section>
+{% endblock %}

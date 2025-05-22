@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+
+{% block content %}
+    <div class="tasks-container">
+        <h2>Lista de Tareas</h2>
+        
+        <div class="filters">
+            <div class="filter-group">
+                <label for="filter-category">Categoría:</label>
+                <select id="filter-category" class="filter-select">
+                    <option value="all">Todas</option>
+                    <option value="Fácil">Fácil</option>
+                    <option value="Medio">Medio</option>
+                    <option value="Difícil">Difícil</option>
+                </select>
+            </div>
+            
+            <div class="filter-group">
+                <label for="filter-status">Estado:</label>
+                <select id="filter-status" class="filter-select">
+                    <option value="all">Todas</option>
+                    <option value="pending">Pendientes</option>
+                    <option value="completed">Completadas</option>
+                </select>
+            </div>
+            
+            <div class="filter-group">
+                <label for="filter-priority">Prioridad:</label>
+                <select id="filter-priority" class="filter-select">
+                    <option value="all">Todas</option>
+                    <option value="Alta">Alta</option>
+                    <option value="Media">Media</option>
+                    <option value="Baja">Baja</option>
+                </select>
+            </div>
+        </div>
+        
+        <div id="tasks-list" class="tasks-list">
+            <!-- Las tareas se cargarán aquí dinámicamente -->
+            <div class="loading">Cargando tareas...</div>
+        </div>
+    </div>
+
+    {% block scripts %}
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Cargar tareas al inicio
+            loadTasks();
+            
+            // Configurar EventSource para actualizaciones en tiempo real
+            const eventSource = new EventSource('/updates');
+            
+            eventSource.onmessage = function(event) {
+                const data = JSON.parse(event.data);
+                if (data.type === 'new_task' || data.type === 'task_completed') {
+                    loadTasks();
+                }
+            };
+            
+            // Escuchar cambios en los filtros
+            document.getElementById('filter-category').addEventListener('change', loadTasks);
+            document.getElementById('filter-status').addEventListener('change', loadTasks);
+            document.getElementById('filter-priority').addEventListener('change', loadTasks);
+        });
+        
+        async function loadTasks() {
+            const categoryFilter = document.getElementById('filter-category').value;
+            const statusFilter = document.getElementById('filter-status').value;
+            const priorityFilter = document.getElementById('filter-priority').value;
+            
+            const tasksList = document.getElementById('tasks-list');
+            tasksList.innerHTML = '<div class="loading">Cargando tareas...</div>';
+            
+            try {
+                const response = await fetch('/get_tasks');
+                const tasks = await response.json();
+                
+                if (tasks.length === 0) {
+                    tasksList.innerHTML = '<div class="no-tasks">No hay tareas registradas.</div>';
+                    return;
+                }
+                
+                tasksList.innerHTML = '';
+                
+                tasks.forEach(task => {
+                    // Aplicar filtros
+                    if (categoryFilter !== 'all' && task.category !== categoryFilter) return;
+                    if (statusFilter === 'pending' && task.completed) return;
+                    if (statusFilter === 'completed' && !task.completed) return;
+                    if (priorityFilter !== 'all' && task.priority !== priorityFilter) return;
+                    
+                    const dueDate = new Date(task.due_date);
+                    const now = new Date();
+                    const isOverdue = !task.completed && dueDate < now;
+                    
+                    const taskElement = document.createElement('div');
+                    taskElement.className = `task ${task.completed ? 'completed' : ''} ${isOverdue ? 'overdue' : ''}`;
+                    taskElement.innerHTML = `
+                        <div class="task-header">
+                            <h3>${task.title}</h3>
+                            <span class="task-category ${task.category.toLowerCase()}">${task.category}</span>
+                            <span class="task-priority ${task.priority.toLowerCase()}">${task.priority}</span>
+                        </div>
+                        <div class="task-body">
+                            <p>${task.description || 'Sin descripción'}</p>
+                            <div class="task-meta">
+                                <span class="task-date">📅 ${dueDate.toLocaleString()}</span>
+                                ${isOverdue ? '<span class="task-overdue">¡Vencida!</span>' : ''}
+                            </div>
+                        </div>
+                        <div class="task-actions">
+                            ${task.completed ? 
+                                '<span class="task-completed">✅ Completada</span>' : 
+                                `<button onclick="completeTask(${task.id})" class="btn-complete">Marcar como completada</button>`
+                            }
+                        </div>
+                    `;
+                    
+                    tasksList.appendChild(taskElement);
+                });
+            } catch (error) {
+                tasksList.innerHTML = '<div class="error">Error cargando las tareas. Intenta recargar la página.</div>';
+                console.error('Error:', error);
+            }
+        }
+        
+        async function completeTask(taskId) {
+            try {
+                const response = await fetch(`/complete_task/${taskId}`, { 
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                });
+                
+                const result = await response.json();
+                
+                if (result.status === 'success') {
+                    loadTasks();
+                } else {
+                    alert('Error al completar la tarea');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error de conexión');
+            }
+        }
+        
+        // Hacer la función accesible globalmente
+        window.updateTaskList = loadTasks;
+    </script>
+    {% endblock %}
+{% endblock %}
