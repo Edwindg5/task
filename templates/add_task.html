@@ -1,3 +1,4 @@
+
 {% extends "base.html" %}
 
 {% block content %}
@@ -45,7 +46,11 @@
         <div id="message" class="message"></div>
     </div>
 
-    {% block scripts %}
+    
+{% endblock %}
+
+
+{% block scripts %}
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             const form = document.getElementById('taskForm');
@@ -104,4 +109,3 @@
         });
     </script>
     {% endblock %}
-{% endblock %}

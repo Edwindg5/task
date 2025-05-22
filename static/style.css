@@ -10,6 +10,8 @@
     --red: #F44336;
     --yellow: #FFC107;
     --blue: #2196F3;
+    --purple: #9C27B0;
+    --orange: #FF9800;
 }
 
 * {
@@ -23,8 +25,99 @@ body {
     line-height: 1.6;
     color: var(--text-color);
     background-color: var(--light-gray);
+    position: relative;
 }
 
+/* ==================== */
+/* ALERTAS CHINGONAS */
+/* ==================== */
+.notification {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    padding: 15px 25px;
+    border-radius: 8px;
+    color: white;
+    font-weight: 500;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    transform: translateX(120%);
+    animation: slideIn 0.5s forwards, fadeOut 0.5s 2.5s forwards;
+    max-width: 350px;
+}
+
+.notification::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 5px;
+    height: 100%;
+    border-radius: 8px 0 0 8px;
+}
+
+.notification.success {
+    background-color: var(--primary-color);
+    border-left: 5px solid var(--secondary-color);
+}
+
+.notification.error {
+    background-color: var(--red);
+    border-left: 5px solid #B71C1C;
+}
+
+.notification.warning {
+    background-color: var(--orange);
+    border-left: 5px solid #E65100;
+}
+
+.notification.info {
+    background-color: var(--blue);
+    border-left: 5px solid #0D47A1;
+}
+
+.notification i {
+    margin-right: 10px;
+    font-size: 1.2em;
+}
+
+@keyframes slideIn {
+    to {
+        transform: translateX(0);
+    }
+}
+
+@keyframes fadeOut {
+    to {
+        opacity: 0;
+        transform: translateX(120%);
+    }
+}
+
+.notification-bounce {
+    animation: bounce 0.5s;
+}
+
+@keyframes bounce {
+    0%, 20%, 50%, 80%, 100% {
+        transform: translateY(0);
+    }
+    40% {
+        transform: translateY(-20px);
+    }
+    60% {
+        transform: translateY(-10px);
+    }
+}
+
+/* Efecto de desvanecimiento al eliminar */
+.fade-out {
+    animation: fadeOut 0.5s forwards;
+}
+
+/* Resto de tu CSS existente permanece igual */
 header {
     background-color: var(--primary-color);
     color: var(--white);
@@ -377,5 +470,10 @@ footer {
     
     .filters {
         flex-direction: column;
+    }
+    
+    .notification {
+        max-width: 90%;
+        right: 5%;
     }
 }
