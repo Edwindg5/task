@@ -122,7 +122,75 @@ if 'VERCEL' not in os.environ:
     scheduler.add_job(func=check_due_tasks, trigger="interval", minutes=60)
     scheduler.start()
 
-# [Tus rutas existentes permanecen igual...]
+# Rutas de la aplicación
+@app.route('/')
+def index():
+    """Página principal con el listado de categorías."""
+    tasks_data = load_tasks()
+    return render_template('index.html', categories=tasks_data['categories'])
+
+@app.route('/add_task', methods=['GET', 'POST'])
+def add_task():
+    """Añade una nueva tarea."""
+    if request.method == 'POST':
+        tasks_data = load_tasks()
+        due_date_str = request.form['due_date']
+        
+        try:
+            formatted_date_str = due_date_str.replace(' ', 'T') if ' ' in due_date_str else due_date_str
+            due_date = datetime.strptime(formatted_date_str, '%Y-%m-%dT%H:%M').replace(tzinfo=timezone.utc)
+            
+            new_task = {
+                'id': len(tasks_data['tasks']) + 1,
+                'title': request.form['title'],
+                'description': request.form['description'],
+                'category': request.form['category'],
+                'priority': request.form['priority'],
+                'due_date': due_date.strftime('%Y-%m-%d %H:%M:%S'),
+                'created_at': datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S'),
+                'completed': False,
+                'notification_sent': False
+            }
+            
+            tasks_data['tasks'].append(new_task)
+            save_tasks(tasks_data)
+            notify_clients('new_task', new_task)
+            
+            if due_date - datetime.now(timezone.utc) <= timedelta(hours=24):
+                if send_email_notification(new_task):
+                    new_task['notification_sent'] = True
+                    save_tasks(tasks_data)
+            
+            return jsonify({'status': 'success', 'task': new_task})
+        
+        except ValueError as e:
+            return jsonify({'status': 'error', 'message': f'Formato de fecha inválido: {str(e)}'}), 400
+    
+    tasks_data = load_tasks()
+    return render_template('add_task.html', categories=tasks_data['categories'])
+
+@app.route('/get_tasks')
+def get_tasks():
+    """Devuelve las tareas en formato JSON."""
+    tasks_data = load_tasks()
+    return jsonify(tasks_data['tasks'])
+
+@app.route('/tasks')
+def tasks():
+    """Página de visualización de tareas."""
+    return render_template('tasks.html')
+
+@app.route('/complete_task/<int:task_id>', methods=['POST'])
+def complete_task(task_id):
+    """Marca una tarea como completada."""
+    tasks_data = load_tasks()
+    for task in tasks_data['tasks']:
+        if task['id'] == task_id:
+            task['completed'] = True
+            save_tasks(tasks_data)
+            notify_clients('task_completed', {'task_id': task_id})
+            break
+    return jsonify({'status': 'success'})
 
 # Server-Sent Events (SSE) para actualizaciones en tiempo real
 clients = []
@@ -168,6 +236,6 @@ def create_app():
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port, debug=False)
+    app.run(host='0.0.0.0', port=port, debug=True)
 else:
     application = create_app()
