@@ -21,7 +21,7 @@ app.config['SERVER_NAME'] = os.environ.get('VERCEL_URL', 'localhost:5000')
 if 'VERCEL' in os.environ:
     app.config['PREFERRED_URL_SCHEME'] = 'https'
 
-# Configuración de Flask-Mail
+# Configuración de Flask-Mail con variables de entorno
 app.config.update(
     MAIL_SERVER=os.environ.get('MAIL_SERVER', 'smtp.gmail.com'),
     MAIL_PORT=int(os.environ.get('MAIL_PORT', 587)),
@@ -65,10 +65,8 @@ def load_tasks():
         try:
             with open('tasks_memory.json', 'r', encoding='utf-8') as f:
                 saved_data = json.load(f)
-                # Validar estructura básica
                 if 'tasks' in saved_data and 'categories' in saved_data:
                     tasks_data = saved_data
-                    # Asegurar next_id está actualizado
                     if tasks_data['tasks']:
                         tasks_data['next_id'] = max(task['id'] for task in tasks_data['tasks']) + 1
                     else:
@@ -80,42 +78,34 @@ def load_tasks():
 def send_email_notification(task):
     """Envía un correo electrónico de recordatorio."""
     try:
-        subject = f"Recordatorio de tarea: {task['title']}"
-        body = f"""
-        Tarea: {task['title']}
-        Categoría: {task['category']}
-        Descripción: {task['description']}
-        Fecha límite: {task['due_date']}
-        Prioridad: {task['priority']}
-        
-        ¡No olvides completar esta tarea!
-        """
-        
         msg = Message(
-            subject=subject,
+            subject=f"Recordatorio de tarea: {task['title']}",
             recipients=[os.environ.get('MAIL_RECIPIENT', 'edwindjll25@gmail.com')],
+            body=f"""
+            Tarea: {task['title']}
+            Categoría: {task['category']}
+            Descripción: {task['description']}
+            Fecha límite: {task['due_date']}
+            Prioridad: {task['priority']}
+            
+            ¡No olvides completar esta tarea!
+            """,
             charset='utf-8'
         )
-        msg.body = body
         
         with app.app_context():
             with mail.connect() as connection:
                 if connection:
-                    connection.timeout = 10
                     connection.send(msg)
         return True
-        
-    except smtplib.SMTPException as e:
-        print(f"⛔ Error SMTP al enviar email: {str(e)}")
-        return False
     except Exception as e:
-        print(f"⛔ Error general al enviar email: {str(e)}")
+        print(f"⛔ Error al enviar email: {str(e)}")
         return False
 
 def check_due_tasks():
     """Verifica tareas próximas a vencer y envía notificaciones."""
     if 'VERCEL' in os.environ:
-        return  # Desactivar scheduler en Vercel
+        return
         
     with app.app_context():
         global tasks_data
@@ -143,7 +133,7 @@ if 'VERCEL' not in os.environ:
 
 # Rutas de la aplicación
 @app.route('/')
-def index():
+def home():
     """Página principal con el listado de categorías."""
     return render_template('index.html', categories=tasks_data['categories'])
 
@@ -153,11 +143,9 @@ def add_task():
     global tasks_data
     
     if request.method == 'POST':
-        due_date_str = request.form['due_date']
-        
         try:
-            formatted_date_str = due_date_str.replace(' ', 'T') if ' ' in due_date_str else due_date_str
-            due_date = datetime.strptime(formatted_date_str, '%Y-%m-%dT%H:%M').replace(tzinfo=timezone.utc)
+            due_date_str = request.form['due_date'].replace(' ', 'T') if ' ' in request.form['due_date'] else request.form['due_date']
+            due_date = datetime.strptime(due_date_str, '%Y-%m-%dT%H:%M').replace(tzinfo=timezone.utc)
             
             new_task = {
                 'id': tasks_data['next_id'],
@@ -182,7 +170,6 @@ def add_task():
                     save_tasks()
             
             return jsonify({'status': 'success', 'task': new_task})
-        
         except ValueError as e:
             return jsonify({'status': 'error', 'message': f'Formato de fecha inválido: {str(e)}'}), 400
     
@@ -194,7 +181,7 @@ def get_tasks():
     return jsonify(tasks_data['tasks'])
 
 @app.route('/tasks')
-def tasks():
+def show_tasks():
     """Página de visualización de tareas."""
     return render_template('tasks.html')
 
@@ -222,12 +209,10 @@ def notify_clients(event_type, data):
             clients.remove(client)
 
 class Client:
-    """Clase para manejar conexiones SSE."""
     def __init__(self):
         self.queue = Queue()
 
     def generator(self):
-        """Genera eventos para el cliente."""
         try:
             while True:
                 message = self.queue.get()
