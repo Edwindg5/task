@@ -237,10 +237,10 @@ def shutdown_scheduler(exception=None):
 def create_app():
     return app
 
-# Reemplaza la última parte del archivo con esto:
+# Esto es esencial para desarrollo local
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=True)
 
-# Específico para Vercel (añade esto)
+# Esto es esencial para Vercel
 app = create_app()

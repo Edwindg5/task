@@ -14,20 +14,14 @@
       "use": "@vercel/static"
     }
   ],
-  "routes": [
-    {
-      "src": "/static/(.*)",
-      "dest": "/static/$1"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "main.py"
-    }
-  ],
   "rewrites": [
     {
+      "source": "/static/(.*)",
+      "destination": "/static/$1"
+    },
+    {
       "source": "/(.*)",
-      "destination": "/"
+      "destination": "main.py"
     }
   ]
 }
