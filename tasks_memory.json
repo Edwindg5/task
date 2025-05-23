@@ -21,6 +21,17 @@
             "created_at": "2025-05-23 00:06:02",
             "completed": false,
             "notification_sent": true
+        },
+        {
+            "id": 3,
+            "title": "s",
+            "description": "s",
+            "category": "Fácil",
+            "priority": "Baja",
+            "due_date": "2025-05-23 00:26:00",
+            "created_at": "2025-05-23 00:25:06",
+            "completed": false,
+            "notification_sent": true
         }
     ],
     "categories": [
@@ -28,5 +39,5 @@
         "Medio",
         "Difícil"
     ],
-    "next_id": 3
+    "next_id": 4
 }

@@ -133,7 +133,7 @@ if 'VERCEL' not in os.environ:
 
 # Rutas de la aplicación
 @app.route('/')
-def home():
+def index():  # Nombre original que esperan los templates
     """Página principal con el listado de categorías."""
     return render_template('index.html', categories=tasks_data['categories'])
 
@@ -181,7 +181,7 @@ def get_tasks():
     return jsonify(tasks_data['tasks'])
 
 @app.route('/tasks')
-def show_tasks():
+def tasks():
     """Página de visualización de tareas."""
     return render_template('tasks.html')
 
